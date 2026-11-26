@@ -3,9 +3,14 @@ import type { GitHubRepo, GitHubUser, ProjectFile } from '../types/ide';
 async function postJson<T>(url: string, body: any = {}): Promise<T> {
   const res = await fetch(url, {
     method: 'POST',
+    credentials: 'same-origin',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   });
+  const contentType = res.headers.get('content-type') || '';
+  if (!contentType.includes('application/json')) {
+    throw new Error(`Request failed (${res.status})`);
+  }
   const data = await res.json().catch(() => ({}));
   if (!res.ok && !data?.error) {
     throw new Error(`Request failed (${res.status})`);
@@ -139,8 +144,10 @@ export const githubService = {
     cloneUrl: string;
     repoName: string;
     owner?: string;
+    branch?: string;
   }): Promise<{
     success: boolean;
+    cloudMode?: boolean;
     folderName?: string;
     workspacePath?: string;
     repoRoot?: string;
@@ -155,6 +162,42 @@ export const githubService = {
     }
   },
 
+  async fetchRepoFiles(params: {
+    owner: string;
+    repo: string;
+    branch?: string;
+  }): Promise<{
+    success: boolean;
+    files?: ProjectFile[];
+    branch?: string;
+    error?: string;
+  }> {
+    try {
+      return await postJson('/api/github/repo-files', params);
+    } catch (err: any) {
+      return { success: false, error: err?.message || 'Failed to pull repository files' };
+    }
+  },
+
+  async pushRepoFiles(params: {
+    owner: string;
+    repo: string;
+    branch?: string;
+    message?: string;
+    files: { path: string; content: string }[];
+  }): Promise<{
+    success: boolean;
+    branch?: string;
+    commitHash?: string;
+    error?: string;
+  }> {
+    try {
+      return await postJson('/api/github/push-files', params);
+    } catch (err: any) {
+      return { success: false, error: err?.message || 'Failed to push changes to GitHub' };
+    }
+  },
+
   async publishWorkspace(params: {
     workspacePath?: string | null;
     repoName: string;
@@ -166,6 +209,7 @@ export const githubService = {
     files?: { path: string; content: string }[];
   }): Promise<{
     success: boolean;
+    cloudMode?: boolean;
     workspacePath?: string;
     repoRoot?: string;
     branch?: string;

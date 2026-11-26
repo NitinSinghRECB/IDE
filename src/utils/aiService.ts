@@ -96,6 +96,7 @@ export async function getBackendAiKeyStatuses(): Promise<{
   try {
     const res = await fetch('/api/ai/keys/status', {
       method: 'POST',
+      credentials: 'same-origin',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({}),
     });
@@ -117,6 +118,7 @@ export async function saveBackendAiKey(providerKey: string, apiKey: string): Pro
   try {
     const res = await fetch('/api/ai/keys/set', {
       method: 'POST',
+      credentials: 'same-origin',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ providerKey, apiKey }),
     });
@@ -141,6 +143,7 @@ export async function testProviderConnection(params: {
   try {
     const res = await fetch('/api/ai/test', {
       method: 'POST',
+      credentials: 'same-origin',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(params),
     });
@@ -184,6 +187,7 @@ export async function sendModelRequest(params: {
     try {
       const res = await fetch('/api/ai/chat-stream', {
         method: 'POST',
+        credentials: 'same-origin',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
         signal,
@@ -231,6 +235,7 @@ export async function sendModelRequest(params: {
   try {
     const res = await fetch('/api/ai/chat', {
       method: 'POST',
+      credentials: 'same-origin',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
       signal,
@@ -264,6 +269,7 @@ export async function fetchAvailableProviderModels(params: {
   try {
     const res = await fetch('/api/ai/models', {
       method: 'POST',
+      credentials: 'same-origin',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(params),
     });

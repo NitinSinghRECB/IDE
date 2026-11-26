@@ -312,6 +312,12 @@ export const GitHubAuthModal: React.FC = () => {
                 </button>
               </div>
 
+              {!githubOAuthConfigured && (
+                <div className="rounded-ide-control border border-ide-amber/30 bg-ide-amber/10 px-3 py-2 text-[11px] text-ide-amber">
+                  GitHub OAuth backend endpoint could not be reached yet. Redeploy with <code className="font-mono">/api/index</code> or use Personal Access Token under Advanced authentication below.
+                </div>
+              )}
+
               {deviceError && (
                 <div className="flex flex-wrap items-center justify-between gap-2 rounded-ide-control border border-ide-rose/30 bg-ide-rose/10 px-3 py-2 text-xs text-ide-rose">
                   <span>{deviceError}</span>

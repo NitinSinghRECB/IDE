@@ -1620,6 +1620,47 @@ export const IDEProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       }));
       await refreshGitStatus();
       return true;
+    } else if (githubLinkedRepo && githubUser) {
+      // Cloud mode (Vercel deployed without local git repository on disk)
+      if (stagedFileIds.length === 0) return false;
+      setGitLoading(true);
+      setGitError(null);
+      setGitSyncMessage(null);
+      const res = await githubService.pushRepoFiles({
+        owner: githubLinkedRepo.owner,
+        repo: githubLinkedRepo.repo,
+        branch: gitBranch || 'main',
+        message: trimmed,
+        files: files.map(f => ({ path: f.path, content: f.content })),
+      });
+      if (!res.success) {
+        setGitError(res.error || 'Failed to commit & push to GitHub');
+        setGitLoading(false);
+        return false;
+      }
+      setFiles(prev => prev.map(f => {
+        if (stagedFileIds.includes(f.id)) {
+          return {
+            ...f,
+            savedContent: f.content,
+            isDirty: false,
+            isModified: false
+          };
+        }
+        return f;
+      }));
+      const newCommit: GitCommit = {
+        hash: res.commitHash ? res.commitHash.slice(0, 7) : Math.random().toString(16).substring(2, 9),
+        message: trimmed,
+        author: githubUser.name || githubUser.login,
+        time: 'Just now',
+        filesCount: stagedFileIds.length
+      };
+      setGitCommits(prev => [newCommit, ...prev]);
+      setStagedFileIds([]);
+      setGitSyncMessage(`Committed & pushed to ${githubLinkedRepo.owner}/${githubLinkedRepo.repo}@${res.branch || gitBranch || 'main'}`);
+      setGitLoading(false);
+      return true;
     } else {
       // In-memory fallback
       if (stagedFileIds.length === 0) return false;
@@ -2189,8 +2230,9 @@ export const IDEProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       cloneUrl: repo.cloneUrl,
       repoName: repo.name,
       owner: repo.owner,
+      branch: repo.defaultBranch,
     });
-    if (!res.success || !res.workspacePath) {
+    if (!res.success || (!res.workspacePath && !res.cloudMode)) {
       setGithubError(res.error || 'Failed to clone repository');
       setIsGitHubLoading(false);
       return false;
@@ -2212,7 +2254,13 @@ export const IDEProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           ];
 
     loadExternalFiles(repoFiles, repo.name, undefined, res.workspacePath);
-    setTerminalCwd(res.workspacePath);
+    if (res.workspacePath) {
+      setTerminalCwd(res.workspacePath);
+    } else if (res.cloudMode) {
+      setRepoRoot(null);
+      setIsGitRepo(true);
+      setGitBranch(res.branch || repo.defaultBranch || 'main');
+    }
     setRemoteUrl(repo.cloneUrl);
     setGithubLinkedRepo({ owner: repo.owner, repo: repo.name });
     setActiveView('editor');
@@ -2273,14 +2321,14 @@ export const IDEProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       setGithubAuthMethod(null);
     }
 
-    if (!res.success || !res.repoRoot) {
+    if (!res.success || (!res.repoRoot && !res.cloudMode)) {
       setGitError(res.error || 'Failed to publish repository to GitHub');
       setGitLoading(false);
       return false;
     }
 
-    setWorkspacePath(res.workspacePath || res.repoRoot);
-    setRepoRoot(res.repoRoot);
+    setWorkspacePath(res.workspacePath || res.repoRoot || null);
+    setRepoRoot(res.repoRoot || null);
     setIsGitRepo(true);
     setGitBranch(res.branch || 'main');
     setRemoteUrl(res.remoteUrl || '');
@@ -2294,7 +2342,17 @@ export const IDEProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       lastSynced: 'Published to GitHub',
     }));
     setGitSyncMessage(`Published to GitHub (${isPrivate ? 'Private' : 'Public'})`);
-    await refreshGitStatus(res.repoRoot);
+    if (res.repoRoot) {
+      await refreshGitStatus(res.repoRoot);
+    } else {
+      setFiles(prev => prev.map(f => ({
+        ...f,
+        savedContent: f.content,
+        isDirty: false,
+        isModified: false,
+      })));
+      setStagedFileIds([]);
+    }
     setGitLoading(false);
     return true;
   };
@@ -2323,6 +2381,33 @@ export const IDEProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   const pushToGitHub = async (): Promise<boolean> => {
     if (!repoRoot) {
+      if (githubLinkedRepo && githubUser) {
+        setGitLoading(true);
+        setGitError(null);
+        setGitSyncMessage(null);
+        const res = await githubService.pushRepoFiles({
+          owner: githubLinkedRepo.owner,
+          repo: githubLinkedRepo.repo,
+          branch: gitBranch || 'main',
+          message: 'Sync workspace from IntelliCode IDE',
+          files: files.map(f => ({ path: f.path, content: f.content })),
+        });
+        if (!res.success) {
+          setGitError(res.error || 'Failed to push to GitHub');
+          setGitLoading(false);
+          return false;
+        }
+        setFiles(prev => prev.map(f => ({
+          ...f,
+          savedContent: f.content,
+          isDirty: false,
+          isModified: false,
+        })));
+        setStagedFileIds([]);
+        setGitSyncMessage(`Pushed to ${githubLinkedRepo.owner}/${githubLinkedRepo.repo}@${res.branch || gitBranch || 'main'}`);
+        setGitLoading(false);
+        return true;
+      }
       setGitError('No active Git repository on disk.');
       return false;
     }
@@ -2343,6 +2428,26 @@ export const IDEProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   const pullFromGitHub = async (): Promise<boolean> => {
     if (!repoRoot) {
+      if (githubLinkedRepo && githubUser) {
+        setGitLoading(true);
+        setGitError(null);
+        setGitSyncMessage(null);
+        const res = await githubService.fetchRepoFiles({
+          owner: githubLinkedRepo.owner,
+          repo: githubLinkedRepo.repo,
+          branch: gitBranch || undefined,
+        });
+        if (!res.success || !res.files) {
+          setGitError(res.error || 'Failed to pull from GitHub');
+          setGitLoading(false);
+          return false;
+        }
+        setFiles(res.files);
+        setStagedFileIds([]);
+        setGitSyncMessage(`Pulled ${res.files.length} files from ${githubLinkedRepo.owner}/${githubLinkedRepo.repo}@${res.branch || gitBranch || 'main'}`);
+        setGitLoading(false);
+        return true;
+      }
       setGitError('No active Git repository on disk.');
       return false;
     }
